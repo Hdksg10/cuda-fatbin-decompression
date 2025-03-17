@@ -37,5 +37,7 @@ void hexdump(const uint8_t* data, size_t size)
         }
         printf("\n");
         pos += 16;
+        printf("pos: %#zx, size: %#zx\n", pos, size); 
     }
+    printf("%#zx\n", pos);
 }

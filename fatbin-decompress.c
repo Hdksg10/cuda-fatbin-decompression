@@ -40,7 +40,7 @@ static void print_header(struct fat_text_header *th)
     flag_to_str(&flagstr, th->flags);
 
     printf("text_header: fatbin_kind: %#x, header_size %#x, size %#zx, compressed_size %#x,\
- minor %#x, major %#x, arch %d, decompressed_size %#zx\n\tflags: %s\n",
+ minor %#x, major %#x, arch %d, decompressed_size %#zx, flagsint: %#lx, \n\tflags: %s\n",
         th->kind,
         th->header_size,
         th->size,
@@ -49,6 +49,7 @@ static void print_header(struct fat_text_header *th)
         th->major,
         th->arch,
         th->decompressed_size,
+        th->flags,
         flagstr);
     printf("\tunknown fields: unknown1: %#x, unknown2: %#x, zeros: %#zx\n",
         th->unknown1,
@@ -271,7 +272,7 @@ int decompress_section(const uint8_t *input, uint8_t **output, size_t *output_si
         hexdump(input + *input_read, 0x60);
         goto error;
     }
-    input_read += padding;
+    *input_read += padding;
 
     padding = ((8 - (size_t)th->decompressed_size) % 8);
     // Because we always allocated enough memory for one more elf_header and this is smaller than
@@ -326,7 +327,9 @@ size_t decompress_fatbin(const uint8_t* fatbin_data, size_t fatbin_size, uint8_t
                 fprintf(stderr, "Something went wrong while checking the header.\n");
                 goto error;
             }
+#ifdef FATBIN_DECOMPRESS_DEBUG
             print_header(th);
+#endif
             if (th->decompressed_size == 0) {
                 fprintf(stderr, "Error: decompressed size is 0.\n");
                 goto soft_error;
@@ -338,19 +341,24 @@ size_t decompress_fatbin(const uint8_t* fatbin_data, size_t fatbin_size, uint8_t
                 goto soft_error;
             }
             input_pos += input_read;
-
+            // printf("\n");
+            // printf("header_size: %#x, size: %#lx\n", eh->header_size, eh->size);
+            // printf("bytes read: %#zx\n", input_read);
             // printf("input_read: %#zx, th size: %#zx\n", input_read, th->size);
             // printf("input_pos: %p, eh: %p, eh size: %#zx, loop: %#llx\n", input_pos, eh, eh->size,
             //     (long long)((uint8_t*)eh + (uint64_t)(eh->header_size) + eh->size) - (long long)input_pos);
-
-        } while (input_pos < (uint8_t*)eh + (uint64_t)(eh->header_size) + eh->size);
-
-        //printf("##### Decompressed data (size %#zx): #####\n", th->decompressed_size);
-        //hexdump(output_pos, th->decompressed_size);
-        //printf("outer loop: %#llx\n", (long long)(fatbin_data + //fatbin_size) - (long long)input_pos);
+            
+        // eh is empty?
+        } while (input_pos < (uint8_t*)eh + (uint64_t)(eh->header_size) + eh->size - 65535);
+#ifdef FATBIN_DECOMPRESS_DEBUG
+            printf("##### Decompressed data (size %#zx): #####\n", th->decompressed_size);
+#endif
     }
  soft_error:
     *decompressed_data = output;
+#ifdef FATBIN_DECOMPRESS_DEBUG
+    hexdump(output, output_size);
+#endif
     return output_size;
  error:
     if (output != NULL) {
