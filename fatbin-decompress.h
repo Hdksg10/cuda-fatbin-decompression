@@ -8,6 +8,7 @@
 #ifndef __FATBIN_DECOMPRESS_H__
 #define __FATBIN_DECOMPRESS_H__
 
+#include <cstddef>
 #include <stdint.h>
 
 struct  __attribute__((__packed__)) fat_elf_header
