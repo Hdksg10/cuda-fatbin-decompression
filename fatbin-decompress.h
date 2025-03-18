@@ -8,8 +8,12 @@
 #ifndef __FATBIN_DECOMPRESS_H__
 #define __FATBIN_DECOMPRESS_H__
 
-#include <cstddef>
+#include <stddef.h>
 #include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct  __attribute__((__packed__)) fat_elf_header
 {
@@ -40,5 +44,9 @@ struct  __attribute__((__packed__)) fat_text_header
 
 size_t decompress(const uint8_t* input, size_t input_size, uint8_t* output, size_t output_size);
 size_t decompress_fatbin(const uint8_t* fatbin_data, size_t fatbin_size, uint8_t** decompressed_data);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // __FATBIN_DECOMPRESS_H__
