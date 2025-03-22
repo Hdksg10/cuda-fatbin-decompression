@@ -148,7 +148,7 @@ int main(int argc, char *argv[])
         //return 1;
     }
 
-    printf("Decompressed data size: %#0zx\n", output_size);
+    printf("Ouput data size: %#0zx\n", output_size);
     //hexdump(output, output_size);
 
     if (compare) {

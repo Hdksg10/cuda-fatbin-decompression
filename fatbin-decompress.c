@@ -305,7 +305,7 @@ size_t decompress_fatbin(const uint8_t* fatbin_data, size_t fatbin_size, uint8_t
     uint8_t *output = NULL;
     size_t output_size = 0;
     size_t input_read;
-
+    int i = 0;
     if (fatbin_data == NULL || decompressed_data == NULL) {
         fprintf(stderr, "Error: fatbin_data is NULL\n");
         goto error;
@@ -316,8 +316,8 @@ size_t decompress_fatbin(const uint8_t* fatbin_data, size_t fatbin_size, uint8_t
             fprintf(stderr, "Something went wrong while checking the header.\n");
             goto error;
         }
-        // printf("elf header no. %d: magic: %#x, version: %#x, header_size: %#x, size: %#zx\n",
-        //        i++, eh->magic, eh->version, eh->header_size, eh->size);
+        printf("elf header no. %d: magic: %#x, version: %#x, header_size: %#x, size: %#zx\n",
+               i++, eh->magic, eh->version, eh->header_size, eh->size);
         input_pos += eh->header_size;
         do {
             // printf("input_pos: %#zx, fatbin_size: %#zx, eh header_size: %#x\n", input_pos - fatbin_data, fatbin_size, eh->header_size);
@@ -329,18 +329,77 @@ size_t decompress_fatbin(const uint8_t* fatbin_data, size_t fatbin_size, uint8_t
             }
 #ifdef FATBIN_DECOMPRESS_DEBUG
             print_header(th);
-#endif
-            if (th->decompressed_size == 0) {
-                fprintf(stderr, "Error: decompressed size is 0.\n");
-                goto soft_error;
+#endif      
+            // PTX section
+            if (th->kind == 1) { 
+                #ifdef FATBIN_DECOMPRESS_DEBUG
+                printf("Found PTX section.\n");
+                #endif
+            }
+            // CUBIN section
+            else if (th->kind == 2) {
+                #ifdef FATBIN_DECOMPRESS_DEBUG
+                printf("Found CUBIN section.\n");
+                #endif
+                input_pos += th->header_size;
+                if (th->flags & FATBIN_FLAG_COMPRESS) {
+                    // Decompress the section but skip it
+                    uint8_t * temp_output;
+                    size_t temp_output_size = 0;
+                    size_t temp_eh_out_offset = 0;
+                    size_t temp_input_read = 0;
+                    if (decompress_section(input_pos, &temp_output, &temp_output_size, eh, th, &temp_eh_out_offset, &temp_input_read) != 0) {
+                        fprintf(stderr, "Something went wrong while decompressing cubin text section.\n");
+                        goto soft_error;
+                    }
+                    #ifdef FATBIN_DECOMPRESS_DEBUG
+                    printf("Decompressed CUBIN section of size %zu.\n", temp_output_size);
+                    #endif
+                    // Free the decompressed data as we don't need it. 
+                    free(temp_output);
+                    input_pos += temp_input_read;
+                } else {
+                    input_pos += th->size; 
+                }
+                continue;
+            }
+            else {
+                #ifdef FATBIN_DECOMPRESS_DEBUG
+                printf("Found other section.\n");
+                #endif
+                input_pos += th->header_size;
+                input_pos += th->size;
+                continue;
             }
             input_pos += th->header_size;
-
-            if (decompress_section(input_pos, &output, &output_size, eh, th, &eh_out_offset, &input_read) != 0) {
-                fprintf(stderr, "Something went wrong while decompressing text section.\n");
-                goto soft_error;
+            // compressed
+            if (th->flags & FATBIN_FLAG_COMPRESS) {
+                if (th->decompressed_size == 0) {
+                    fprintf(stderr, "Error: decompressed size is 0.\n");
+                    goto soft_error;
+                }
+                if (decompress_section(input_pos, &output, &output_size, eh, th, &eh_out_offset, &input_read) != 0) {
+                    fprintf(stderr, "Something went wrong while decompressing text section.\n");
+                    goto soft_error;
+                }
+                input_pos += input_read;
             }
-            input_pos += input_read;
+            // not compressed
+            else {
+                if ((output = realloc(output, output_size + th->size + eh->header_size + th->header_size)) == NULL) {
+                    fprintf(stderr, "Error allocating memory of size %#zx for output buffer: %s\n", 
+                            output_size + th->decompressed_size + eh->header_size + th->header_size, strerror(errno));
+                    goto error;
+                }
+                memcpy(output + output_size, input_pos, th->size);
+                // we only copy th->size bytes, the rest of buffer is padding, so we need to fill it with zeros
+                memset(output + output_size + th->size, 0, th->header_size + eh->header_size);
+                output_size += th->size + eh->header_size + th->header_size;
+                input_pos += th->size;
+                
+            }
+            printf("input offset: %#zx\n", input_pos - fatbin_data);
+            
             // printf("\n");
             // printf("header_size: %#x, size: %#lx\n", eh->header_size, eh->size);
             // printf("bytes read: %#zx\n", input_read);
@@ -349,7 +408,7 @@ size_t decompress_fatbin(const uint8_t* fatbin_data, size_t fatbin_size, uint8_t
             //     (long long)((uint8_t*)eh + (uint64_t)(eh->header_size) + eh->size) - (long long)input_pos);
             
         // eh is empty?
-        } while (input_pos < (uint8_t*)eh + (uint64_t)(eh->header_size) + eh->size - 65535);
+        } while (input_pos < (uint8_t*)eh + (uint64_t)(eh->header_size) + eh->size);
 #ifdef FATBIN_DECOMPRESS_DEBUG
             printf("##### Decompressed data (size %#zx): #####\n", th->decompressed_size);
 #endif
